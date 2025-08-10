@@ -1,0 +1,79 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: wpotel-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-example}
+      MYSQL_USER: ${MYSQL_USER:-wordpress}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Secret5555}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wordpress}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - wpotel-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  wordpress:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: wpotel-wordpress
+    restart: unless-stopped
+    ports:
+      - "${WORDPRESS_PORT:-8086}:8000"
+    user: "www-data:www-data"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # OpenTelemetry Configuration for AUTO-INSTRUMENTATION
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-wordpress-microfrontend}
+      OTEL_SERVICE_VERSION: ${OTEL_SERVICE_VERSION:-1.0.0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-https://otel.nidhun.me}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-https://otel.nidhun.me/v1/traces}
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:-https://otel.nidhun.me/v1/metrics}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-otlp}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-otlp}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-service.name=wordpress-microfrontend,service.version=1.0.0}
+      
+      # Enable auto-instrumentation
+      OTEL_PHP_AUTOLOAD_ENABLED: "true"
+      OTEL_PHP_EXCLUDED_URLS: ""
+      OTEL_INSTRUMENTATION_HTTP_ENABLED: "true"
+      OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED: "true"
+      
+      # WordPress Configuration
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: ${MYSQL_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD:-Secret5555}
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE:-wordpress}
+      
+      # Microfrontend URLs
+      PAYPAL_MICROFRONTEND_URL: ${PAYPAL_MICROFRONTEND_URL:-https://p4l.nidhun.me}
+      SECOND_MICROFRONTEND_URL: ${SECOND_MICROFRONTEND_URL:-https://s8r.nidhun.me}
+    volumes:
+      - wp_content:/var/local/wordpress/wp-content
+    networks:
+      - wpotel-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  db_data:
+    name: wpotel_db_data
+  wp_content:
+    name: wpotel_wp_content
+
+networks:
+  wpotel-network:
+    name: wpotel-network
+    driver: bridge
