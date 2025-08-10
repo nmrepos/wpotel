@@ -6,6 +6,9 @@ RUN apk update \
     && apk add wget mysql mysql-client php82-mysqli
 RUN docker-php-ext-install mysqli
 
+# Install Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
 # Install OpenTelemetry PHP extension
 RUN apk add --no-cache autoconf g++ make \
     && pecl install opentelemetry-1.1.0 \
@@ -23,12 +26,14 @@ RUN mkdir /var/local/wordpress/wp-content
 RUN chown www-data:www-data /var/local/wordpress/wp-content
 VOLUME /var/local/wordpress/wp-content
 
+# Copy composer files and install dependencies
+COPY ./composer.json composer.json
+RUN composer install --no-dev --optimize-autoloader
+
 # Copy configuration files
 COPY ./wp-config.php wp-config.php
 COPY ./phpinfo.php phpinfo.php
 COPY ./start_wordpress.sh start_wordpress.sh
-COPY ./composer.json composer.json
-COPY ./vendor/ vendor/
 
 # Copy the microfrontend plugin
 COPY ./microfrontend-embed.php /tmp/microfrontend-embed.php
